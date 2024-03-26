@@ -1,47 +1,42 @@
-import java.io.FileInputStream
-import java.util.Properties
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import java.io.ByteArrayOutputStream
 
-val majorVersion = 1
-val minorVersion = 0
-val patchVersion = 0
+fun Project.gitCommitCount(): Int {
+    val stdout = ByteArrayOutputStream()
+    exec {
+        commandLine("git", "rev-list", "--count", "HEAD")
+        standardOutput = stdout
+    }
+    return stdout.toString().trim().toInt()
+}
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-parcelize")
-    id("com.google.dagger.hilt.android")
+    id("com.google.gms.google-services")
     kotlin("kapt")
-    kotlin("plugin.serialization") version "1.9.0"
+    kotlin("plugin.serialization")
+    id("com.google.dagger.hilt.android")
 }
 
+val majorVersion = 2
+val minorVersion = 0
+val patchVersion = 0
+
 android {
-    namespace = "ru.unilms"
+    namespace = "ru.aip.intern"
     compileSdk = 34
 
-    val versionPropsFile = file("version.properties")
+    defaultConfig {
+        applicationId = "ru.aip.intern"
+        minSdk = 28
+        targetSdk = 34
+        versionCode = gitCommitCount()
+        versionName = "$majorVersion.$minorVersion.$patchVersion"
 
-    if (versionPropsFile.canRead()) {
-        val versionProps = Properties()
-
-        versionProps.load(FileInputStream(versionPropsFile))
-
-        val code = versionProps["VERSION_CODE"]?.toString()?.toIntOrNull()?.plus(1) ?: 1
-        if (gradle.startParameter.taskNames.contains("elease")) {
-            versionProps["VERSION_CODE"] = code.toString()
-            versionProps.store(versionPropsFile.writer(), null)
+        vectorDrawables {
+            useSupportLibrary = true
         }
-
-        defaultConfig {
-            applicationId = "ru.unilms"
-            minSdk = 28
-            targetSdk = 34
-            versionCode = code
-            versionName = "$majorVersion.$minorVersion.$patchVersion"
-
-            vectorDrawables.useSupportLibrary = true
-        }
-    } else {
-        throw GradleException("Could not read version.properties!")
     }
 
     signingConfigs {
@@ -57,58 +52,33 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            applicationVariants.all {
-                val variant = this
-                val flavorName = variant.productFlavors.first().name
-                variant.outputs
-                    .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
-                    .forEach { output ->
-                        val outputFileName =
-                            "${rootProject.name}-${flavorName}-${project.extensions.extraProperties["fullVersion"]}.apk"
-                        output.outputFileName = outputFileName
-                    }
-            }
-            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
+            applicationVariants.all {
+                val variant = this
+                variant.outputs
+                    .map { it as BaseVariantOutputImpl }
+                    .forEach { output ->
+                        val outputFileName =
+                            "${
+                                rootProject.name.replace(
+                                    " ",
+                                    ""
+                                )
+                            }-${project.extensions.extraProperties["fullVersion"]}.apk"
+                        output.outputFileName = outputFileName
+                    }
+            }
         }
+
         getByName("debug") {
+            isMinifyEnabled = false
             applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
         }
     }
-
-    flavorDimensions += listOf("role")
-
-    productFlavors {
-        create("admin") {
-            dimension = "role"
-            applicationIdSuffix = ".admin"
-            resValue("string", "app_name", "@string/app_name_admin")
-        }
-        create("tutor") {
-            dimension = "role"
-            applicationIdSuffix = ".tutor"
-            resValue("string", "app_name", "@string/app_name_tutor")
-        }
-        create("student") {
-            dimension = "role"
-            applicationIdSuffix = ".student"
-            resValue("string", "app_name", "@string/app_name_student")
-        }
-    }
-
-    sourceSets {
-        named("tutor") {
-            kotlin.srcDirs("src/tutorAndStudent/java")
-        }
-        named("student") {
-            kotlin.srcDirs("src/tutorAndStudent/java")
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -118,10 +88,9 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.3"
+        kotlinCompilerExtensionVersion = "1.5.10"
     }
     packaging {
         resources {
@@ -132,69 +101,50 @@ android {
 
 dependencies {
 
-    val ktorVersion = "2.3.4"
-    val hiltVersion = "2.48.1"
-    val richTextVersion = "0.17.0"
+    implementation("com.google.firebase:firebase-messaging-ktx:23.4.1")
+    val ktorVersion = "2.3.8"
 
-    implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core-ktx:1.12.0")
-
-
-    // Lifecycle
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.6.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
-
-    implementation("androidx.activity:activity-compose:1.8.0")
-    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation(platform("androidx.compose:compose-bom:2024.03.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material:material:1.5.4")
-    implementation("androidx.compose.material3:material3:1.1.2")
-    implementation("androidx.compose.material:material-icons-extended:1.5.4")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material:material")
 
-    // Ktor (http client)
-    implementation("io.ktor:ktor-client-core:$ktorVersion")
-    implementation("io.ktor:ktor-client-android:$ktorVersion")
-    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
-    implementation("io.ktor:ktor-client-serialization:$ktorVersion")
-    implementation("io.ktor:ktor-client-logging:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.2.11")
+    implementation("androidx.navigation:navigation-compose:2.7.7")
 
+    implementation(platform("com.google.firebase:firebase-bom:32.8.0"))
+    implementation("com.google.firebase:firebase-analytics")
 
-    // Forms
-    implementation("com.github.benjamin-luescher:compose-form:0.2.3")
+    implementation("com.google.dagger:hilt-android:2.51")
+    kapt("com.google.dagger:hilt-android-compiler:2.51")
 
-    // DI (Hilt)
-    implementation("com.google.dagger:hilt-android:$hiltVersion")
-    kapt("com.google.dagger:hilt-android-compiler:$hiltVersion")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-    // Images
-    implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("androidx.compose.runtime:runtime-livedata")
 
-    // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // Navigation
-    implementation("androidx.navigation:navigation-compose:2.7.5")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    implementation("com.kizitonwose.calendar:compose:2.5.0")
 
-    // Calendar
-    implementation("com.kizitonwose.calendar:compose:2.4.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.4.1")
+    implementation("io.ktor:ktor-client-core:$ktorVersion") // Базовая клиентская библиотека
+    implementation("io.ktor:ktor-client-android:$ktorVersion") // Плагин для работы в Android
+    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion") // Плагины для парсинга JSON в модели и обратно
+    implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
+    implementation("io.ktor:ktor-client-serialization:$ktorVersion")
+    implementation("io.ktor:ktor-client-logging:$ktorVersion") // Плагин для логгирования
+    implementation("ch.qos.logback:logback-classic:1.2.11")  // Драйвер логгирования (последняя подддерживаемая в Android версия)
 
-    // Debug stuff
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
 
-    // RichText
-    implementation("com.halilibo.compose-richtext:richtext-ui-material3:${richTextVersion}")
-    implementation("com.halilibo.compose-richtext:richtext-commonmark:${richTextVersion}")
-
-    // Downloading files
-    implementation("androidx.work:work-runtime-ktx:2.8.1")
-
+kapt {
+    correctErrorTypes = true
 }
 
 task("printVersionName") {
@@ -203,7 +153,7 @@ task("printVersionName") {
             ".",
             ""
         )
-    }-${android.defaultConfig.versionCode}"
+    }-${gitCommitCount()}"
     project.extensions.extraProperties["fullVersion"] = versionName
     println(versionName)
 }
